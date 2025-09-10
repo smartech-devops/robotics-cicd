@@ -13,6 +13,10 @@ RUN pip install --no-cache-dir --user -r requirements.txt
 # Production stage
 FROM python:3.11-slim AS production
 
+# Build arguments for versioning
+ARG APP_VERSION=1.0.0
+ARG BUILD_DATE
+
 # Create non-root user for security
 RUN useradd --create-home --shell /bin/bash --uid 1000 appuser
 
@@ -31,6 +35,8 @@ ENV PYTHONPATH=/home/appuser/.local/lib/python3.11/site-packages
 ENV PORT=8080
 ENV ENVIRONMENT=production
 ENV PYTHONUNBUFFERED=1
+ENV APP_VERSION=${APP_VERSION}
+ENV BUILD_DATE=${BUILD_DATE}
 
 # Change ownership to non-root user
 RUN chown -R appuser:appuser /app

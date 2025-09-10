@@ -17,11 +17,42 @@ jobs:
     
     permissions:
       id-token: write   # Required for OIDC
-      contents: read    # Required for checkout
+      contents: write   # Required for creating tags
+      actions: read     # Required for checkout
     
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Fetch all history for versioning
+          
+      - name: Generate version number
+        id: version
+        run: |
+          # Get the latest tag, default to v0.0.0 if none exists
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+          echo "Latest tag: $LATEST_TAG"
+          
+          # Extract version numbers (remove 'v' prefix if present)
+          VERSION=${LATEST_TAG#v}
+          
+          # Split version into parts
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          
+          # Create new version
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          NEW_TAG="v$NEW_VERSION"
+          
+          echo "New version: $NEW_VERSION"
+          echo "New tag: $NEW_TAG"
+          
+          # Set outputs for other steps
+          echo "version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "build_date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> $GITHUB_OUTPUT
         
       - name: Configure AWS credentials using OIDC
         uses: aws-actions/configure-aws-credentials@v4
@@ -39,9 +70,17 @@ jobs:
         uses: docker/setup-buildx-action@v3
         
       - name: Build Docker image
+        env:
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
         run: |
-          docker build -t robotics-cicd-demo:latest ./app
-          echo "Docker image built successfully"
+          docker build \
+            --build-arg APP_VERSION=$APP_VERSION \
+            --build-arg BUILD_DATE="$BUILD_DATE" \
+            -t robotics-cicd-demo:latest \
+            -t robotics-cicd-demo:$APP_VERSION \
+            ./app
+          echo "Docker image built successfully with version $APP_VERSION"
           
       - name: Test Docker image
         run: |
@@ -75,16 +114,33 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: robotics-cicd
-          IMAGE_TAG: ${{ github.sha }}
+          APP_VERSION: ${{ steps.version.outputs.version }}
+          BUILD_DATE: ${{ steps.version.outputs.build_date }}
         run: |
-          # Build image with ECR tag
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG ./app
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest ./app
+          # Build image with version and ECR tags
+          docker build \
+            --build-arg APP_VERSION=$APP_VERSION \
+            --build-arg BUILD_DATE="$BUILD_DATE" \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:$APP_VERSION \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:latest \
+            -t $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }} \
+            ./app
           
-          # Push both tags to ECR
-          echo "Pushing image to ECR..."
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          # Push all tags to ECR
+          echo "Pushing images to ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$APP_VERSION
           docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
           
-          echo "Image pushed successfully!"
-          echo "Image URI: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+          echo "Images pushed successfully!"
+          echo "Version tag: $ECR_REGISTRY/$ECR_REPOSITORY:$APP_VERSION"
+          echo "Latest tag: $ECR_REGISTRY/$ECR_REPOSITORY:latest"
+          echo "Commit tag: $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}"
+          
+      - name: Create Git tag
+        if: github.ref == 'refs/heads/main'
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git tag ${{ steps.version.outputs.tag }}
+          git push origin ${{ steps.version.outputs.tag }}
