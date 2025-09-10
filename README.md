@@ -47,6 +47,25 @@ Development teams need a robust, automated way to:
 GitHub → Actions → Docker Build → ECR → ECS Deployment
 ```
 
+### ECS Infrastructure Design
+**Current AWS Environment:**
+- Region: eu-north-1
+- VPC: vpc-00f325a5edc80a18e (default)
+- Public Subnets: 3 available for high availability
+
+**ECS Setup:**
+1. **ECS Cluster**: `robotics-cicd-demo-cluster` (Fargate)
+2. **Task Definition**: Containerized Flask web service
+3. **Security Group**: HTTP access on port 8080
+4. **ECS Service**: 1 task with public IP for demo access
+
+**Infrastructure Components:**
+- **Cluster**: Serverless Fargate compute
+- **Networking**: Public subnets with internet gateway
+- **Security**: Security group allowing HTTP traffic
+- **Service Discovery**: Public IP assignment for direct access
+- **Cost**: ~$0.10-0.20/hour for demo task
+
 ## Future Enhancements
 - Blue/green deployments
 - Automated testing integration

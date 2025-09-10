@@ -1,0 +1,50 @@
+{
+  "family": "robotics-cicd-demo-task",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "256",
+  "memory": "512",
+  "executionRoleArn": "arn:aws:iam::485701710361:role/ecsTaskExecutionRole",
+  "taskRoleArn": "arn:aws:iam::485701710361:role/ecsTaskExecutionRole",
+  "containerDefinitions": [
+    {
+      "name": "robotics-cicd-container",
+      "image": "485701710361.dkr.ecr.eu-north-1.amazonaws.com/robotics-cicd:latest",
+      "portMappings": [
+        {
+          "containerPort": 8080,
+          "protocol": "tcp"
+        }
+      ],
+      "essential": true,
+      "logConfiguration": {
+        "logDriver": "awslogs",
+        "options": {
+          "awslogs-group": "/ecs/robotics-cicd-demo",
+          "awslogs-region": "eu-north-1",
+          "awslogs-stream-prefix": "ecs"
+        }
+      },
+      "healthCheck": {
+        "command": [
+          "CMD-SHELL",
+          "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health', timeout=5); print('Health check passed')\" || exit 1"
+        ],
+        "interval": 30,
+        "timeout": 10,
+        "retries": 3,
+        "startPeriod": 60
+      },
+      "environment": [
+        {
+          "name": "PORT",
+          "value": "8080"
+        },
+        {
+          "name": "FLASK_ENV",
+          "value": "production"
+        }
+      ]
+    }
+  ]
+}
