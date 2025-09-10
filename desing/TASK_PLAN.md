@@ -53,9 +53,9 @@ Build a complete DevOps solution demonstrating:
 
 #### Subtasks:
 1. **Create hello_world.py Python script**
-   - Simple script that prints "Hello from CI/CD!"
-   - Include version information in output
-   - Make it web-ready (basic Flask app for demo)
+   - Flask web service with "Hello from CI/CD!" message
+   - HTTP endpoints: `/` (main), `/health` (monitoring), `/version` (info)
+   - Version information in JSON responses for easy verification
 
 2. **Write Dockerfile for the application**
    - Use official Python slim image
@@ -105,12 +105,12 @@ Build a complete DevOps solution demonstrating:
    - Create ECS cluster
    - Define task definition with versioned image
    - Set up ECS service for deployment
-   - Configure basic networking (public subnet)
+   - Configure public networking for HTTP access
 
 6. **Test complete pipeline end-to-end**
    - Push change to trigger pipeline
    - Verify build, tag, and deployment
-   - Confirm running service in ECS
+   - Confirm running service accessible via HTTP endpoints
 
 ---
 

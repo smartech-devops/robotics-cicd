@@ -1,0 +1,90 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  AWS_REGION: eu-north-1
+  AWS_ACCOUNT_ID: 485701710361
+
+jobs:
+  build-and-test:
+    name: Build and Test Docker Image
+    runs-on: ubuntu-latest
+    
+    permissions:
+      id-token: write   # Required for OIDC
+      contents: read    # Required for checkout
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        
+      - name: Configure AWS credentials using OIDC
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ env.AWS_ACCOUNT_ID }}:role/production-devops-cicd-demo-github-actions-role
+          role-session-name: GitHubActions-CI-CD-Demo
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Verify AWS identity
+        run: |
+          echo "AWS Account ID: $(aws sts get-caller-identity --query Account --output text)"
+          echo "AWS Region: ${{ env.AWS_REGION }}"
+          
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+        
+      - name: Build Docker image
+        run: |
+          docker build -t robotics-cicd-demo:latest .
+          echo "Docker image built successfully"
+          
+      - name: Test Docker image
+        run: |
+          # Start container in background
+          docker run -d -p 8080:8080 --name test-container robotics-cicd-demo:latest
+          
+          # Wait for container to start
+          sleep 10
+          
+          # Test endpoints
+          echo "Testing main endpoint..."
+          curl -f http://localhost:8080/ || exit 1
+          
+          echo "Testing health endpoint..."
+          curl -f http://localhost:8080/health || exit 1
+          
+          echo "Testing version endpoint..."
+          curl -f http://localhost:8080/version || exit 1
+          
+          # Clean up
+          docker stop test-container
+          docker rm test-container
+          
+          echo "All tests passed!"
+          
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+        
+      - name: Build, tag, and push image to Amazon ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: robotics-cicd-demo
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          # Build image with ECR tag
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
+          
+          # Push both tags to ECR
+          echo "Pushing image to ECR..."
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          
+          echo "Image pushed successfully!"
+          echo "Image URI: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
